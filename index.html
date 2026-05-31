@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShadowScan — AI Shadow Analytics Detector</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  /* ── RESET & BASE ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg-0:      #080b10;
+    --bg-1:      #0d1117;
+    --bg-2:      #161b22;
+    --bg-3:      #21262d;
+    --bg-4:      #2d333b;
+    --border:    #30363d;
+    --text-1:    #e6edf3;
+    --text-2:    #8b949e;
+    --text-3:    #484f58;
+    --accent:    #388bfd;
+    --accent-glow: rgba(56,139,253,0.15);
+    --red:       #f85149;
+    --red-bg:    rgba(248,81,73,0.12);
+    --orange:    #d29922;
+    --orange-bg: rgba(210,153,34,0.12);
+    --yellow:    #e3b341;
+    --green:     #3fb950;
+    --green-bg:  rgba(63,185,80,0.12);
+    --purple:    #bc8cff;
+    --teal:      #39d353;
+    --font: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', 'Fira Code', monospace;
+    --sidebar-w: 220px;
+    --topbar-h:  56px;
+    --radius: 8px;
+  }
+  html, body { height: 100%; overflow: hidden; font-family: var(--font); background: var(--bg-0); color: var(--text-1); font-size: 13px; }
+
+  /* ── LAYOUT ── */
+  #app { display: flex; height: 100vh; }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    width: var(--sidebar-w); min-width: var(--sidebar-w);
+    background: var(--bg-1);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    z-index: 10;
+  }
+  .logo {
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .logo-icon {
+    width: 30px; height: 30px; border-radius: 7px;
+    background: linear-gradient(135deg, #f85149 0%, #bc8cff 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; flex-shrink: 0;
+  }
+  .logo-text { font-size: 14px; font-weight: 700; letter-spacing: -0.3px; line-height: 1.2; }
+  .logo-sub { font-size: 9px; color: var(--text-3); letter-spacing: 1px; text-transform: uppercase; }
+
+  .nav-section { padding: 12px 8px 4px; }
+  .nav-label { font-size: 9px; color: var(--text-3); letter-spacing: 1.2px; text-transform: uppercase; padding: 0 8px 6px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 7px 10px; border-radius: 6px; cursor: pointer;
+    color: var(--text-2); font-size: 12.5px; transition: all .15s;
+    position: relative; margin-bottom: 1px;
+  }
+  .nav-item:hover { background: var(--bg-3); color: var(--text-1); }
+  .nav-item.active { background: var(--accent-glow); color: var(--accent); }
+  .nav-item .icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+  .nav-badge {
+    margin-left: auto; background: var(--red); color: #fff;
+    font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 10px;
+    min-width: 16px; text-align: center;
+  }
+  .nav-badge.orange { background: var(--orange); }
+  .nav-badge.blue { background: var(--accent); }
+
+  .sidebar-footer {
+    margin-top: auto; padding: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .status-pill {
+    display: flex; align-items: center; gap: 7px;
+    padding: 6px 10px; background: var(--green-bg);
+    border: 1px solid rgba(63,185,80,0.2); border-radius: 20px;
+    font-size: 11px; color: var(--green);
+  }
+  .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.2)} }
+
+  /* ── MAIN ── */
+  #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── TOPBAR ── */
+  #topbar {
+    height: var(--topbar-h); min-height: var(--topbar-h);
+    background: var(--bg-1); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 20px; gap: 12px;
+  }
+  .topbar-title { font-size: 15px; font-weight: 600; }
+  .topbar-sub { font-size: 11px; color: var(--text-2); }
+  .topbar-spacer { flex: 1; }
+  .alert-banner {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 12px; background: var(--red-bg);
+    border: 1px solid rgba(248,81,73,0.3); border-radius: 6px;
+    font-size: 11px; color: var(--red);
+    animation: fadeIn .3s;
+  }
+  .topbar-btn {
+    padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg-3); color: var(--text-1); font-size: 11.5px;
+    cursor: pointer; transition: all .15s; font-family: var(--font);
+  }
+  .topbar-btn:hover { background: var(--bg-4); border-color: var(--accent); }
+  .topbar-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* ── CONTENT ── */
+  #content { flex: 1; overflow-y: auto; padding: 20px; scrollbar-width: thin; scrollbar-color: var(--bg-4) transparent; }
+  .page { display: none; animation: fadeIn .2s; }
+  .page.active { display: block; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+
+  /* ── STAT CARDS ── */
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat-card {
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px;
+    position: relative; overflow: hidden;
+  }
+  .stat-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  }
+  .stat-card.red::before { background: linear-gradient(90deg, var(--red), transparent); }
+  .stat-card.orange::before { background: linear-gradient(90deg, var(--orange), transparent); }
+  .stat-card.blue::before { background: linear-gradient(90deg, var(--accent), transparent); }
+  .stat-card.green::before { background: linear-gradient(90deg, var(--green), transparent); }
+  .stat-label { font-size: 10.5px; color: var(--text-2); letter-spacing: .3px; margin-bottom: 8px; }
+  .stat-value { font-size: 28px; font-weight: 700; letter-spacing: -1px; line-height: 1; }
+  .stat-value.red { color: var(--red); }
+  .stat-value.orange { color: var(--orange); }
+  .stat-value.blue { color: var(--accent); }
+  .stat-value.green { color: var(--green); }
+  .stat-delta { font-size: 10px; color: var(--text-2); margin-top: 6px; }
+  .stat-delta .up { color: var(--red); } .stat-delta .dn { color: var(--green); }
+  .stat-icon { position: absolute; top: 14px; right: 14px; font-size: 20px; opacity: .15; }
+
+  /* ── SECTION ── */
+  .section { margin-bottom: 20px; }
+  .section-header {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 12px;
+  }
+  .section-title { font-size: 13px; font-weight: 600; }
+  .section-badge { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600; }
+  .section-badge.red { background: var(--red-bg); color: var(--red); }
+  .section-badge.orange { background: var(--orange-bg); color: var(--orange); }
+  .section-badge.green { background: var(--green-bg); color: var(--green); }
+  .section-spacer { flex: 1; }
+  .section-action { font-size: 11px; color: var(--accent); cursor: pointer; }
+  .section-action:hover { text-decoration: underline; }
+
+  /* ── TWO-COL LAYOUT ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+  }
+  .card-header {
+    padding: 12px 14px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 600;
+  }
+  .card-body { padding: 14px; }
+
+  /* ── TABLE ── */
+  .tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .tbl th {
+    text-align: left; padding: 8px 12px;
+    font-size: 10.5px; color: var(--text-2); font-weight: 600;
+    letter-spacing: .3px; text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .tbl td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .tbl tr:last-child td { border-bottom: none; }
+  .tbl tr:hover td { background: rgba(255,255,255,.02); }
+  .tbl .mono { font-family: var(--mono); font-size: 11px; }
+
+  /* ── RISK BADGE ── */
+  .risk {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700;
+    letter-spacing: .3px;
+  }
+  .risk.critical { background: rgba(248,81,73,.18); color: var(--red); border: 1px solid rgba(248,81,73,.3); }
+  .risk.high { background: rgba(210,153,34,.18); color: var(--orange); border: 1px solid rgba(210,153,34,.3); }
+  .risk.medium { background: rgba(227,179,65,.12); color: var(--yellow); border: 1px solid rgba(227,179,65,.25); }
+  .risk.low { background: rgba(63,185,80,.12); color: var(--green); border: 1px solid rgba(63,185,80,.25); }
+
+  /* ── AI TOOL BADGE ── */
+  .tool-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 4px; font-size: 10.5px; font-weight: 600;
+    border: 1px solid;
+  }
+  .tool-badge.openai   { color:#10a37f; border-color:rgba(16,163,127,.3); background:rgba(16,163,127,.08); }
+  .tool-badge.gemini   { color:#4285f4; border-color:rgba(66,133,244,.3); background:rgba(66,133,244,.08); }
+  .tool-badge.copilot  { color:#7b5ea7; border-color:rgba(123,94,167,.3); background:rgba(123,94,167,.08); }
+  .tool-badge.perplexity { color:#20808d; border-color:rgba(32,128,141,.3); background:rgba(32,128,141,.08); }
+  .tool-badge.unknown  { color:var(--text-2); border-color:var(--border); background:var(--bg-3); }
+  .tool-badge.grok     { color:#e65c00; border-color:rgba(230,92,0,.3); background:rgba(230,92,0,.08); }
+
+  /* ── PROGRESS BAR ── */
+  .bar-bg { height: 5px; background: var(--bg-4); border-radius: 3px; overflow: hidden; min-width: 60px; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width .4s; }
+
+  /* ── MINI AVATAR ── */
+  .avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; flex-shrink: 0;
+  }
+
+  /* ── HEATMAP ── */
+  #heatmap-wrap { overflow-x: auto; }
+  .heatmap-grid { display: grid; gap: 3px; }
+  .hm-cell {
+    width: 100%; padding-top: 100%;
+    border-radius: 4px; position: relative; cursor: pointer;
+    transition: transform .15s, box-shadow .15s;
+  }
+  .hm-cell:hover { transform: scale(1.15); box-shadow: 0 0 10px rgba(248,81,73,.5); z-index: 5; }
+  .hm-label-row { display: flex; gap: 3px; margin-bottom: 4px; }
+  .hm-label { font-size: 9px; color: var(--text-2); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hm-row-labels { display: flex; flex-direction: column; gap: 3px; }
+  .hm-row-label { font-size: 9px; color: var(--text-2); white-space: nowrap; }
+
+  /* ── TIMELINE / FEED ── */
+  .feed { display: flex; flex-direction: column; gap: 0; }
+  .feed-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 9px 14px; border-bottom: 1px solid var(--border);
+    font-size: 11.5px; animation: slideIn .3s;
+  }
+  .feed-item:last-child { border-bottom: none; }
+  @keyframes slideIn { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:none} }
+  .feed-dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+  .feed-content { flex: 1; line-height: 1.5; }
+  .feed-time { font-size: 10px; color: var(--text-3); white-space: nowrap; margin-left: auto; padding-top: 2px; }
+
+  /* ── PROMPT CARD ── */
+  .prompt-card {
+    background: var(--bg-3); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px 12px; margin-bottom: 8px;
+    font-size: 11.5px; position: relative;
+  }
+  .prompt-card.flagged { border-color: rgba(248,81,73,.35); }
+  .prompt-text { font-family: var(--mono); font-size: 11px; color: var(--text-1); line-height: 1.6; margin: 6px 0; }
+  .prompt-text mark { background: rgba(248,81,73,.25); color: var(--red); border-radius: 2px; padding: 0 2px; }
+  .prompt-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .prompt-user { font-size: 10.5px; color: var(--text-2); }
+
+  /* ── SCANNER INPUT ── */
+  .scanner-input {
+    width: 100%; padding: 10px 12px;
+    background: var(--bg-3); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text-1); font-family: var(--mono);
+    font-size: 12px; resize: vertical; min-height: 80px;
+    outline: none; transition: border-color .2s;
+  }
+  .scanner-input:focus { border-color: var(--accent); }
+  .scan-btn {
+    padding: 7px 16px; background: var(--accent); color: #fff;
+    border: none; border-radius: 6px; cursor: pointer; font-family: var(--font);
+    font-size: 12px; font-weight: 600; margin-top: 8px; transition: opacity .15s;
+  }
+  .scan-btn:hover { opacity: .85; }
+
+  /* ── RISK METER ── */
+  .risk-meter { position: relative; margin: 8px 0; }
+  .risk-track { height: 8px; border-radius: 4px; background: var(--bg-4); overflow: hidden; }
+  .risk-fill { height: 100%; border-radius: 4px; transition: width .6s cubic-bezier(.4,0,.2,1); }
+  .risk-pointer { position: absolute; top: -3px; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--bg-2); transition: left .6s; }
+
+  /* ── FILTER ROW ── */
+  .filter-row { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+  .filter-chip {
+    padding: 4px 10px; border-radius: 16px; border: 1px solid var(--border);
+    background: var(--bg-3); color: var(--text-2); font-size: 11px; cursor: pointer; transition: all .15s;
+  }
+  .filter-chip:hover { border-color: var(--accent); color: var(--text-1); }
+  .filter-chip.active { border-color: var(--accent); background: var(--accent-glow); color: var(--accent); }
+  .search-box {
+    flex: 1; max-width: 200px; padding: 4px 10px;
+    background: var(--bg-3); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text-1); font-family: var(--font);
+    font-size: 11.5px; outline: none;
+  }
+  .search-box:focus { border-color: var(--accent); }
+  .search-box::placeholder { color: var(--text-3); }
+
+  /* ── TOOLTIP ── */
+  #tooltip {
+    position: fixed; z-index: 999; pointer-events: none;
+    background: var(--bg-4); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 12px; font-size: 11.5px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.5);
+    opacity: 0; transition: opacity .15s; max-width: 240px;
+  }
+  #tooltip.visible { opacity: 1; }
+
+  /* ── RISK DONUT ── */
+  .donut-wrap { display: flex; align-items: center; gap: 20px; }
+  .legend { display: flex; flex-direction: column; gap: 7px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-size: 11.5px; }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── SCORE RING ── */
+  .score-ring-wrap { display: flex; flex-direction: column; align-items: center; }
+  .score-ring { position: relative; width: 80px; height: 80px; }
+  .score-ring canvas { position: absolute; top: 0; left: 0; }
+  .score-ring-val { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 18px; font-weight: 700; }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-thumb { background: var(--bg-4); border-radius: 3px; }
+
+  /* ── MISC ── */
+  .mono { font-family: var(--mono); }
+  .text-2 { color: var(--text-2); }
+  .text-3 { color: var(--text-3); }
+  .mt8 { margin-top: 8px; }
+  .mt16 { margin-top: 16px; }
+  .flex { display: flex; align-items: center; }
+  .gap8 { gap: 8px; }
+  .gap4 { gap: 4px; }
+  .ml-auto { margin-left: auto; }
+  .tag {
+    display: inline-flex; align-items: center;
+    padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 600;
+    background: var(--bg-4); color: var(--text-2); border: 1px solid var(--border);
+  }
+  .new-event { animation: highlightRow .8s ease; }
+  @keyframes highlightRow { from{background:rgba(56,139,253,.12)} to{background:transparent} }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ── SIDEBAR ── -->
+  <nav id="sidebar">
+    <div class="logo">
+      <div class="logo-icon">🔍</div>
+      <div>
+        <div class="logo-text">ShadowScan</div>
+        <div class="logo-sub">AI Governance</div>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Monitor</div>
+      <div class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard',this)">
+        <span class="icon">⚡</span> Dashboard
+      </div>
+      <div class="nav-item" data-page="ai-usage" onclick="switchPage('ai-usage',this)">
+        <span class="icon">📡</span> AI Usage Monitor
+        <span class="nav-badge" id="badge-usage">0</span>
+      </div>
+      <div class="nav-item" data-page="uploads" onclick="switchPage('uploads',this)">
+        <span class="icon">📁</span> Upload Detector
+        <span class="nav-badge orange" id="badge-uploads">0</span>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Detection</div>
+      <div class="nav-item" data-page="prompts" onclick="switchPage('prompts',this)">
+        <span class="icon">💬</span> Prompt Scanner
+        <span class="nav-badge blue" id="badge-prompts">0</span>
+      </div>
+      <div class="nav-item" data-page="heatmap" onclick="switchPage('heatmap',this)">
+        <span class="icon">🗺️</span> Exposure Heatmap
+      </div>
+      <div class="nav-item" data-page="reports" onclick="switchPage('reports',this)">
+        <span class="icon">📊</span> AI Report Detector
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Tools</div>
+      <div class="nav-item" data-page="scanner" onclick="switchPage('scanner',this)">
+        <span class="icon">🔬</span> Scan a Prompt
+      </div>
+      <div class="nav-item" data-page="settings" onclick="switchPage('settings',this)">
+        <span class="icon">⚙️</span> Policy Settings
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="status-pill">
+        <span class="pulse"></span> Monitoring Active
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── MAIN ── -->
+  <div id="main">
+
+    <!-- TOPBAR -->
+    <div id="topbar">
+      <div>
+        <div class="topbar-title" id="topbar-title">Overview Dashboard</div>
+        <div class="topbar-sub" id="topbar-sub">Real-time AI shadow usage detection</div>
+      </div>
+      <div class="topbar-spacer"></div>
+      <div class="alert-banner" id="live-alert" style="display:none">
+        <span>🚨</span> <span id="live-alert-text"></span>
+      </div>
+      <button class="topbar-btn" onclick="exportCSV()">⬇ Export CSV</button>
+      <button class="topbar-btn primary" onclick="triggerScan()">▶ Run Scan</button>
+    </div>
+
+    <!-- CONTENT -->
+    <div id="content">
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE: DASHBOARD
+      ════════════════════════════════════════════════════ -->
+      <div class="page active" id="page-dashboard">
+
+        <div class="stat-grid">
+          <div class="stat-card red">
+            <div class="stat-label">Critical Exposures</div>
+            <div class="stat-value red" id="stat-critical">0</div>
+            <div class="stat-delta"><span class="up" id="stat-critical-delta">↑ +0</span> since last scan</div>
+            <div class="stat-icon">🚨</div>
+          </div>
+          <div class="stat-card orange">
+            <div class="stat-label">Sensitive Uploads</div>
+            <div class="stat-value orange" id="stat-uploads">0</div>
+            <div class="stat-delta"><span class="up" id="stat-uploads-delta">↑ +0</span> today</div>
+            <div class="stat-icon">📤</div>
+          </div>
+          <div class="stat-card blue">
+            <div class="stat-label">Shadow AI Users</div>
+            <div class="stat-value blue" id="stat-users">0</div>
+            <div class="stat-delta"><span id="stat-users-delta" class="up">↑ +0</span> new this week</div>
+            <div class="stat-icon">👤</div>
+          </div>
+          <div class="stat-card green">
+            <div class="stat-label">Prompts Scanned</div>
+            <div class="stat-value green" id="stat-prompts">0</div>
+            <div class="stat-delta"><span class="dn">↑ Monitoring</span> continuously</div>
+            <div class="stat-icon">🔬</div>
+          </div>
+        </div>
+
+        <div class="two-col">
+
+          <!-- Live Event Feed -->
+          <div class="card">
+            <div class="card-header">
+              <span>⚡</span> Live Detection Feed
+              <span style="margin-left:auto;font-size:10px;color:var(--text-3)" id="feed-count">0 events</span>
+            </div>
+            <div id="live-feed" class="feed" style="max-height:320px;overflow-y:auto;">
+              <!-- injected by JS -->
+            </div>
+          </div>
+
+          <!-- Risk Distribution -->
+          <div class="card">
+            <div class="card-header"><span>📊</span> Risk Distribution</div>
+            <div class="card-body">
+              <div class="donut-wrap">
+                <canvas id="riskChart" width="140" height="140"></canvas>
+                <div class="legend" id="risk-legend"></div>
+              </div>
+              <div style="margin-top:16px">
+                <div class="section-title" style="font-size:11px;color:var(--text-2);margin-bottom:8px">TOP EXPOSED DEPARTMENTS</div>
+                <div id="dept-bars"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- AI Tools Usage Bar -->
+        <div class="section mt16">
+          <div class="section-header">
+            <span class="section-title">Unauthorized AI Tools Detected</span>
+            <span class="section-spacer"></span>
+            <span class="section-action" onclick="switchPage('ai-usage', document.querySelector('[data-page=ai-usage]'))">View all →</span>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <canvas id="toolsChart" height="80"></canvas>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /dashboard -->
+
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE: AI USAGE MONITOR
+      ════════════════════════════════════════════════════ -->
+      <div class="page" id="page-ai-usage">
+        <div class="filter-row">
+          <input class="search-box" type="text" placeholder="Search user, dept, tool…" oninput="filterUsage(this.value)">
+          <div class="filter-chip active" onclick="setUsageFilter('all',this)">All</div>
+          <div class="filter-chip" onclick="setUsageFilter('critical',this)">🔴 Critical</div>
+          <div class="filter-chip" onclick="setUsageFilter('high',this)">🟠 High</div>
+          <div class="filter-chip" onclick="setUsageFilter('medium',this)">🟡 Medium</div>
+          <div class="filter-chip" onclick="setUsageFilter('low',this)">🟢 Low</div>
+          <div style="margin-left:auto;font-size:11px;color:var(--text-2)" id="usage-count-label">— users</div>
+        </div>
+        <div class="card">
+          <table class="tbl" id="usage-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Department</th>
+                <th>AI Tool Used</th>
+                <th>Files Uploaded</th>
+                <th>Data Types</th>
+                <th>Last Seen</th>
+                <th>Risk</th>
+                <th>Sessions</th>
+              </tr>
+            </thead>
+            <tbody id="usage-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE: UPLOAD DETECTOR
+      ════════════════════════════════════════════════════ -->
+      <div class="page" id="page-uploads">
+        <div class="section-header">
+          <span class="section-title">Sensitive File Uploads to AI Tools</span>
+          <span class="section-badge red" id="upload-critical-count">0 CRITICAL</span>
+          <span class="section-badge orange" id="upload-high-count">0 HIGH</span>
+        </div>
+        <div class="card">
+          <table class="tbl" id="upload-table">
+            <thead>
+              <tr>
+                <th>Filename</th>
+                <th>Uploaded By</th>
+                <th>AI Tool</th>
+                <th>File Type</th>
+                <th>Sensitivity</th>
+                <th>Data Detected</th>
+                <th>Timestamp</th>
+                <th>Risk Score</th>
+              </tr>
+            </thead>
+            <tbody id="upload-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE: PROMPT SCANNER
+      ════════════════════════════════════════════════════ -->
+      <div class="page" id="page-prompts">
+        <div class="two-col" style="margin-bottom:16px">
+          <div class="card">
+            <div class="card-header"><span>⚠️</span> Flagged Prompt Patterns</div>
+            <div id="prompt-feed" style="padding:12px;max-height:600px;overflow-y:auto"></div>
+          </div>
+          <div>
+            <div class="card" style="margin-bottom:12px">
+              <div class="card-header"><span>📈</span> Prompt Leakage Over Time</div>
+              <div class="card-body"><canvas id="promptChart" height="120"></canvas></div>
+            </div>
+            <div class="card">
+              <div class="card-header"><span>🏷️</span> Top Leakage Patterns</div>
+              <div class="card-body" id="pattern-list"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE: EXPOSURE HEATMAP
+      ════════════════════════════════════════════════════ -->
+      <div class="page" id="page-heatmap">
+        <div class="section-header">
+          <span class="section-title">🗺️ Data Exposure Heatmap</span>
+          <span class="section-badge red">LIVE</span>
+          <span class="section-spacer"></span>
+          <span class="filter-chip active" id="hm-mode-btn" onclick="toggleHmMode()">By Department × AI Tool</span>
+        </div>
+        <p style="font-size:11.5px;color:var(--text-2);margin-bottom:16px">
+          Each cell shows the cumulative risk score for a department uploading data to a specific AI tool.
+          Darker red = higher exposure. Click any cell for details.
+        </p>
+
+        <div class="two-col" style="margin-bottom:16px">
+          <div class="card">
+            <div class="card-header"><span>🌡️</span> Exposure Intensity Matrix</div>
+            <div class="card-body" id="heatmap-container" style="overflow-x:auto"></div>
+          </div>
+          <div>
+            <div class="card" style="margin-bottom:12px">
+              <div class="card-header"><span>📊</span> Dataset Exposure Ranking</div>
+              <div class="card-body" id="dataset-rank"></div>
+            </div>
+            <div class="card">
+              <div class="card-header"><span>🔴</span> Heatmap Legend</div>
+              <div class="card-body">
+                <div style="display:flex;gap:4px;align-items:center;margin-bottom:6px">
+                  <div style="height:12px;flex:1;border-radius:3px;background:linear-gradient(90deg,#1a2a1a,#f85149)"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-2)">
+                  <span>No activity</span><span>Low</span><span>Medium</span><span>High</span><span>Critical</span>
+                </div>
+                <div style="margin-top:12px;font-size:11px;color:var(--text-2);line-height:1.7">
+                  Risk score = Σ (sensitivity_weight × frequency) for all uploads from that dept to that AI tool.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detail panel -->
+        <div class="card" id="hm-detail" style="display:none">
+          <div class="card-header"><span>🔎</span> Cell Detail <span id="hm-detail-title" style="color:var(--text-2);font-weight:400;margin-left:6px"></span></div>
+          <div class="card-body" id="hm-detail-body"></div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE: AI REPORT DETECTOR
+      ════════════════════════════════════════════════════ -->
+      <div class="page" id="page-reports">
+        <div class="section-header">
+          <span class="section-title">AI-Generated Report Detection</span>
+          <span class="section-badge orange">BETA</span>
+        </div>
+        <p style="font-size:11.5px;color:var(--text-2);margin-bottom:16px">
+          Detects reports and documents that appear to have been generated or augmented by unauthorized AI tools,
+          based on linguistic fingerprints, metadata anomalies, and known AI formatting patterns.
+        </p>
+        <div class="card" style="margin-bottom:16px">
+          <table class="tbl" id="reports-table">
+            <thead>
+              <tr>
+                <th>Document</th>
+                <th>Author</th>
+                <th>Dept</th>
+                <th>AI Probability</th>
+                <th>Signals</th>
+                <th>Confidential Data</th>
+                <th>Submitted</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="reports-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE: PROMPT SCANNER TOOL
+      ════════════════════════════════════════════════════ -->
+      <div class="page" id="page-scanner">
+        <div class="two-col">
+          <div>
+            <div class="card">
+              <div class="card-header"><span>🔬</span> Prompt Risk Analyzer</div>
+              <div class="card-body">
+                <div style="font-size:11.5px;color:var(--text-2);margin-bottom:8px">
+                  Paste a prompt below to analyze it for sensitive data leakage patterns, PII, confidential keywords, and policy violations.
+                </div>
+                <textarea class="scanner-input" id="scan-input" placeholder="Paste prompt here…
+
+Example: &quot;Analyze this Q3 revenue data: ACME Corp revenue was $4.2M, margins at 18%...&quot;"></textarea>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <button class="scan-btn" onclick="runPromptScan()">🔍 Analyze Prompt</button>
+                  <span style="font-size:11px;color:var(--text-3)">or try a sample →</span>
+                  <button class="topbar-btn" onclick="loadSample(0)">Sample 1</button>
+                  <button class="topbar-btn" onclick="loadSample(1)">Sample 2</button>
+                  <button class="topbar-btn" onclick="loadSample(2)">Sample 3</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="card" id="scan-results-card" style="display:none">
+              <div class="card-header"><span>🎯</span> Analysis Results</div>
+              <div class="card-body" id="scan-results-body"></div>
+            </div>
+            <div class="card" id="scan-placeholder" style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--text-3);font-size:12px">
+              ← Analyze a prompt to see results
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════
+           PAGE: SETTINGS
+      ════════════════════════════════════════════════════ -->
+      <div class="page" id="page-settings">
+        <div class="two-col">
+          <div class="card">
+            <div class="card-header"><span>🚫</span> Blocked AI Tools</div>
+            <div class="card-body" id="blocked-tools-list"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span>🏷️</span> Sensitive Data Classification Rules</div>
+            <div class="card-body" id="rules-list"></div>
+          </div>
+        </div>
+        <div style="margin-top:16px" class="card">
+          <div class="card-header"><span>🔔</span> Alert Thresholds</div>
+          <div class="card-body">
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px" id="thresholds"></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<div id="tooltip"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  DATA ENGINE
+// ═══════════════════════════════════════════════════════════
+
+const USERS = [
+  {name:"Sarah Chen",dept:"Finance",initials:"SC",color:"#388bfd"},
+  {name:"Marcus Webb",dept:"Sales",initials:"MW",color:"#bc8cff"},
+  {name:"Priya Nair",dept:"HR",initials:"PN",color:"#3fb950"},
+  {name:"Daniel Kim",dept:"Engineering",initials:"DK",color:"#d29922"},
+  {name:"Aisha Okonkwo",dept:"Legal",initials:"AO",color:"#f85149"},
+  {name:"Tom Reyes",dept:"Marketing",initials:"TR",color:"#39d353"},
+  {name:"Lena Vogt",dept:"Finance",initials:"LV",color:"#388bfd"},
+  {name:"James Park",dept:"Operations",initials:"JP",color:"#20808d"},
+  {name:"Fatima Al-Said",dept:"Strategy",initials:"FA",color:"#e65c00"},
+  {name:"Alex Brennan",dept:"Product",initials:"AB",color:"#bc8cff"},
+  {name:"Chloe Dupont",dept:"HR",initials:"CD",color:"#3fb950"},
+  {name:"Ravi Sharma",dept:"Engineering",initials:"RS",color:"#d29922"},
+];
+
+const AI_TOOLS = [
+  {id:"openai",label:"ChatGPT",cls:"openai"},
+  {id:"gemini",label:"Gemini",cls:"gemini"},
+  {id:"copilot",label:"M365 Copilot",cls:"copilot"},
+  {id:"perplexity",label:"Perplexity",cls:"perplexity"},
+  {id:"grok",label:"Grok",cls:"grok"},
+  {id:"unknown",label:"Unknown Tool",cls:"unknown"},
+];
+
+const DATA_TYPES = ["PII","Revenue","Customer DB","Salary","M&A","Source Code","Health Records","IP Plans","Contracts","Trade Secrets"];
+const DEPTS = [...new Set(USERS.map(u=>u.dept))];
+
+const FILES = [
+  {name:"Q1_Revenue_Final.xlsx",type:"Excel",sensitivity:"critical",dt:["Revenue","Margins"]},
+  {name:"Employee_Salaries_2025.csv",type:"CSV",sensitivity:"critical",dt:["Salary","PII"]},
+  {name:"Customer_PII_Export.csv",type:"CSV",sensitivity:"critical",dt:["PII","Customer DB"]},
+  {name:"MA_Target_Analysis.xlsx",type:"Excel",sensitivity:"critical",dt:["M&A","Strategy"]},
+  {name:"Healthcare_Claims_Q2.csv",type:"CSV",sensitivity:"critical",dt:["Health Records","PII"]},
+  {name:"Source_Code_Auth.zip",type:"ZIP",sensitivity:"high",dt:["Source Code","IP Plans"]},
+  {name:"Vendor_Contract_2025.docx",type:"Word",sensitivity:"high",dt:["Contracts"]},
+  {name:"Board_Strategy_Deck.pptx",type:"PPTX",sensitivity:"high",dt:["M&A","IP Plans"]},
+  {name:"Marketing_Budget.xlsx",type:"Excel",sensitivity:"medium",dt:["Revenue"]},
+  {name:"Product_Roadmap_H2.pptx",type:"PPTX",sensitivity:"medium",dt:["IP Plans"]},
+  {name:"Sales_Pipeline_Q3.xlsx",type:"Excel",sensitivity:"medium",dt:["Customer DB","Revenue"]},
+  {name:"HR_Headcount_Plan.xlsx",type:"Excel",sensitivity:"high",dt:["Salary","PII"]},
+];
+
+const PROMPT_PATTERNS = [
+  {label:"Revenue figures",re:/\$[\d,.]+[MBK]|\brev\w*\s+\$|\bmillion\b/gi,weight:3,color:"#f85149"},
+  {label:"Personal names + role",re:/\b(Mr\.|Ms\.|Dr\.)\s+\w+|employee\s+\w+/gi,weight:3,color:"#d29922"},
+  {label:"Internal project names",re:/Project\s+[A-Z][a-z]+|Operation\s+[A-Z]+/gi,weight:2,color:"#bc8cff"},
+  {label:"Email addresses",re:/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,weight:3,color:"#f85149"},
+  {label:"Financial metrics",re:/\bEBITDA\b|\bmargin\b|\bGM%\b|\bARR\b|\bMRR\b/gi,weight:2,color:"#d29922"},
+  {label:"M&A keywords",re:/\bacquisition\b|\bmerger\b|\bdue diligence\b|\btarget company\b/gi,weight:4,color:"#f85149"},
+  {label:"Client names",re:/\b(ACME|Globex|Initech|Umbrella|Hooli|Dunder|Pied Piper)\b/gi,weight:2,color:"#d29922"},
+  {label:"Salary data",re:/\bsalary\b|\bcompensation\b|\bonboarding\b.*\$|\bOTE\b/gi,weight:3,color:"#f85149"},
+  {label:"Health data",re:/\bpatient\b|\bdiagnosis\b|\bHIPAA\b|\bclaim\b|\bmedical\b/gi,weight:4,color:"#f85149"},
+  {label:"Confidential markers",re:/\bconfidential\b|\binternal only\b|\bdo not share\b|\bNDA\b/gi,weight:2,color:"#d29922"},
+];
+
+const SAMPLE_PROMPTS = [
+  `Analyze the following Q3 financial data for Dunder Industries:
+Revenue: $4.2M (+18% YoY), EBITDA margin: 22%, employee headcount: 340.
+Our M&A target acquisition price is $65M. Please write a board presentation.`,
+  `I need you to review this employee record:
+Name: John Smith, SSN: 123-45-6789, salary: $145,000,
+department: Engineering, health_plan: Premium, DOB: 1985-03-12.
+Summarize for onboarding.`,
+  `Here is the confidential product roadmap for Project Phoenix — internal only, do not share.
+Q1: Launch new auth module, Q2: Integrate with Salesforce, Q3: IPO readiness prep.
+Please draft investor messaging.`
+];
+
+// ── STATE ──
+let state = {
+  usageEvents: [], uploadEvents: [], promptEvents: [],
+  reportEvents: [], feedEvents: [],
+  stats: {critical:0, uploads:0, users:0, prompts:0},
+  usageFilter: 'all', usageSearch: '',
+};
+
+// ── SEED DATA ──
+function seedData() {
+  const now = Date.now();
+  const randInt = (a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+  const ago = h => new Date(now - h*3600*1000).toLocaleString('en-US',{month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+
+  // Usage events
+  USERS.forEach((u,i)=>{
+    const numTools = randInt(1,3);
+    for(let t=0;t<numTools;t++){
+      const tool = AI_TOOLS[randInt(0,AI_TOOLS.length-1)];
+      const fileCount = randInt(0,8);
+      const risk = fileCount>5?'critical':fileCount>3?'high':fileCount>1?'medium':'low';
+      state.usageEvents.push({
+        user:u, tool, fileCount, risk,
+        sessions: randInt(2,50),
+        lastSeen: ago(randInt(1,72)),
+        dataTypes: DATA_TYPES.slice(0,randInt(1,3)).sort(()=>Math.random()-.5),
+      });
+    }
+  });
+
+  // Upload events
+  FILES.forEach((f,i)=>{
+    const user = USERS[i%USERS.length];
+    const tool = AI_TOOLS[randInt(0,AI_TOOLS.length-1)];
+    const score = f.sensitivity==='critical'?randInt(80,99):f.sensitivity==='high'?randInt(55,79):randInt(20,54);
+    state.uploadEvents.push({
+      file:f, user, tool, score,
+      ts: ago(randInt(1,48)),
+    });
+  });
+
+  // Prompt events
+  const PROMPT_SAMPLES = [
+    {user:USERS[0],text:`Analyze Q4 revenue of $8.3M for ACME Corp — margins dropped to 14%. Write a board memo. Internal only.`,tool:AI_TOOLS[0]},
+    {user:USERS[4],text:`Review this contract clause for Dunder Industries acquisition — due diligence phase, NDA applies.`,tool:AI_TOOLS[2]},
+    {user:USERS[2],text:`Employee Ms. Sarah Chen (salary: $132,000) needs offboarding checklist. DOB: 1990-04-22.`,tool:AI_TOOLS[0]},
+    {user:USERS[7],text:`Summarize patient claim data from healthcare_claims_q2.csv — HIPAA compliant response needed.`,tool:AI_TOOLS[1]},
+    {user:USERS[8],text:`Project Phoenix roadmap — internal only. Q1: auth rewrite, Q2: merger integration, Q3: IPO prep.`,tool:AI_TOOLS[4]},
+    {user:USERS[1],text:`Give me a competitor analysis using our MRR of $2.1M and ARR of $25M. Do not share externally.`,tool:AI_TOOLS[3]},
+    {user:USERS[5],text:`Draft ad copy using our Q3 budget of $450K and customer acquisition data from CRM export.`,tool:AI_TOOLS[0]},
+    {user:USERS[3],text:`Review source code for auth module — proprietary IP, confidential. Find security vulnerabilities.`,tool:AI_TOOLS[2]},
+  ];
+  PROMPT_SAMPLES.forEach((p,i)=>{
+    state.promptEvents.push({...p, ts:ago(randInt(1,24)), id:i});
+  });
+
+  // Reports
+  const RPT_DOCS = [
+    {name:"Q3 Sales Analysis Report.docx",author:USERS[1],dept:"Sales",aiProb:94,signals:["Uniform sentence length","ChatGPT formatting","Timestamp mismatch"],hasConfidential:true},
+    {name:"HR Policy Update 2025.docx",author:USERS[2],dept:"HR",aiProb:78,signals:["Generic phrasing","AI-typical hedging"],hasConfidential:false},
+    {name:"Competitor Intelligence Deck.pptx",author:USERS[9],dept:"Product",aiProb:88,signals:["External data hallucination risk","AI footnote style","Metadata: created by AI tool"],hasConfidential:true},
+    {name:"M&A Due Diligence Summary.pdf",author:USERS[4],dept:"Legal",aiProb:65,signals:["Bullet-heavy structure","Passive voice pattern"],hasConfidential:true},
+    {name:"Engineering Sprint Report.md",author:USERS[3],dept:"Engineering",aiProb:42,signals:["Some AI-typical phrasing"],hasConfidential:false},
+    {name:"Board Presentation Q4.pptx",author:USERS[0],dept:"Finance",aiProb:91,signals:["Revenue figures AI-formatted","Timestamp mismatch","External tool metadata"],hasConfidential:true},
+  ];
+  RPT_DOCS.forEach((r,i)=>{
+    state.reportEvents.push({...r, ts:ago(randInt(2,96))});
+  });
+
+  // Stats
+  state.stats.critical = state.uploadEvents.filter(e=>e.file.sensitivity==='critical').length;
+  state.stats.uploads = state.uploadEvents.length;
+  state.stats.users = new Set(state.usageEvents.map(e=>e.user.name)).size;
+  state.stats.prompts = randInt(1200,1800);
+
+  // Feed
+  const feedItems = [
+    ...state.uploadEvents.slice(0,4).map(e=>({type:'upload',text:`<b>${e.user.name}</b> uploaded <b>${e.file.name}</b> to ${toolBadgeHTML(e.tool)}`,risk:e.file.sensitivity,ts:e.ts})),
+    ...state.promptEvents.slice(0,4).map(e=>({type:'prompt',text:`Prompt leakage detected from <b>${e.user.name}</b> via ${toolBadgeHTML(e.tool)}`,risk:'high',ts:e.ts})),
+  ];
+  feedItems.sort(()=>Math.random()-.5);
+  state.feedEvents = feedItems;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RENDER HELPERS
+// ═══════════════════════════════════════════════════════════
+
+function toolBadgeHTML(tool){
+  return `<span class="tool-badge ${tool.cls}">${tool.label}</span>`;
+}
+function riskBadge(r){
+  const icons={critical:'🔴',high:'🟠',medium:'🟡',low:'🟢'};
+  return `<span class="risk ${r}">${icons[r]||''} ${r.toUpperCase()}</span>`;
+}
+function avatarHTML(u){
+  return `<span class="avatar" style="background:${u.color}22;color:${u.color}">${u.initials}</span>`;
+}
+function scoreBar(score, color){
+  const c = score>80?'#f85149':score>60?'#d29922':score>40?'#e3b341':'#3fb950';
+  return `<div class="bar-bg"><div class="bar-fill" style="width:${score}%;background:${c}"></div></div> <span style="font-size:10px;color:${c}">${score}</span>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PAGE: DASHBOARD
+// ═══════════════════════════════════════════════════════════
+
+function renderDashboard(){
+  // Stats
+  animateCounter('stat-critical', state.stats.critical);
+  animateCounter('stat-uploads', state.stats.uploads);
+  animateCounter('stat-users', state.stats.users);
+  animateCounter('stat-prompts', state.stats.prompts);
+  document.getElementById('stat-critical-delta').textContent = `↑ +${Math.floor(state.stats.critical*0.3)} since last scan`;
+  document.getElementById('stat-uploads-delta').textContent = `↑ +${Math.floor(state.stats.uploads*0.4)} today`;
+  document.getElementById('stat-users-delta').textContent = `↑ +${Math.floor(state.stats.users*0.25)} new this week`;
+
+  // Feed
+  renderFeed();
+
+  // Risk donut chart
+  const critCount = state.uploadEvents.filter(e=>e.file.sensitivity==='critical').length;
+  const highCount  = state.uploadEvents.filter(e=>e.file.sensitivity==='high').length;
+  const medCount   = state.uploadEvents.filter(e=>e.file.sensitivity==='medium').length;
+  const lowCount   = state.uploadEvents.filter(e=>e.file.sensitivity==='low').length + 2;
+  const ctx = document.getElementById('riskChart').getContext('2d');
+  new Chart(ctx, {
+    type:'doughnut',
+    data:{
+      labels:['Critical','High','Medium','Low'],
+      datasets:[{data:[critCount,highCount,medCount,lowCount],backgroundColor:['#f85149','#d29922','#e3b341','#3fb950'],borderWidth:0,spacing:2}]
+    },
+    options:{plugins:{legend:{display:false}},cutout:'65%',animation:{duration:800}}
+  });
+  const legendEl = document.getElementById('risk-legend');
+  const pairs=[['Critical',critCount,'#f85149'],['High',highCount,'#d29922'],['Medium',medCount,'#e3b341'],['Low',lowCount,'#3fb950']];
+  legendEl.innerHTML = pairs.map(([l,v,c])=>`<div class="legend-item"><div class="legend-dot" style="background:${c}"></div><span style="color:var(--text-2)">${l}</span><span style="margin-left:auto;font-weight:700;color:${c}">${v}</span></div>`).join('');
+
+  // Dept bars
+  const deptRisk = {};
+  DEPTS.forEach(d=>deptRisk[d]=0);
+  state.uploadEvents.forEach(e=>{
+    const w = e.file.sensitivity==='critical'?4:e.file.sensitivity==='high'?3:e.file.sensitivity==='medium'?2:1;
+    deptRisk[e.user.dept]=(deptRisk[e.user.dept]||0)+w;
+  });
+  const sorted = Object.entries(deptRisk).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const max = sorted[0][1];
+  document.getElementById('dept-bars').innerHTML = sorted.map(([dept,score])=>{
+    const pct = Math.round(score/max*100);
+    const col = pct>80?'#f85149':pct>60?'#d29922':'#3fb950';
+    return `<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span style="color:var(--text-1)">${dept}</span><span style="color:${col}">${score}pts</span></div><div class="bar-bg" style="height:6px"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div></div>`;
+  }).join('');
+
+  // Tools chart
+  const toolCounts = {};
+  AI_TOOLS.forEach(t=>toolCounts[t.label]=0);
+  state.usageEvents.forEach(e=>toolCounts[e.tool.label]=(toolCounts[e.tool.label]||0)+1);
+  const toolColors=['#10a37f','#4285f4','#7b5ea7','#20808d','#e65c00','#8b949e'];
+  const tctx = document.getElementById('toolsChart').getContext('2d');
+  new Chart(tctx,{
+    type:'bar',
+    data:{
+      labels:Object.keys(toolCounts),
+      datasets:[{data:Object.values(toolCounts),backgroundColor:toolColors,borderRadius:4}]
+    },
+    options:{
+      plugins:{legend:{display:false}},
+      scales:{y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#8b949e',font:{size:10}}},x:{grid:{display:false},ticks:{color:'#8b949e',font:{size:10}}}},
+      animation:{duration:600}
+    }
+  });
+
+  // Badges
+  updateBadges();
+}
+
+function renderFeed(){
+  const feed = document.getElementById('live-feed');
+  const dotColor = r => r==='critical'?'#f85149':r==='high'?'#d29922':r==='medium'?'#e3b341':'#3fb950';
+  feed.innerHTML = state.feedEvents.map(e=>`
+    <div class="feed-item">
+      <div class="feed-dot" style="background:${dotColor(e.risk)}"></div>
+      <div class="feed-content">${e.text}</div>
+      <div class="feed-time">${e.ts}</div>
+    </div>
+  `).join('');
+  document.getElementById('feed-count').textContent = `${state.feedEvents.length} events`;
+}
+
+function updateBadges(){
+  const critical = state.usageEvents.filter(e=>e.risk==='critical').length;
+  const highUploads = state.uploadEvents.filter(e=>e.file.sensitivity==='high'||e.file.sensitivity==='critical').length;
+  document.getElementById('badge-usage').textContent = critical;
+  document.getElementById('badge-uploads').textContent = highUploads;
+  document.getElementById('badge-prompts').textContent = state.promptEvents.length;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PAGE: AI USAGE MONITOR
+// ═══════════════════════════════════════════════════════════
+
+let usageFilter='all', usageSearch='';
+
+function renderUsageTable(){
+  let events = state.usageEvents;
+  if(usageFilter!=='all') events=events.filter(e=>e.risk===usageFilter);
+  if(usageSearch) events=events.filter(e=>(e.user.name+e.user.dept+e.tool.label).toLowerCase().includes(usageSearch));
+  document.getElementById('usage-count-label').textContent = `${events.length} user sessions`;
+  document.getElementById('usage-tbody').innerHTML = events.map(e=>`
+    <tr>
+      <td><div class="flex gap8">${avatarHTML(e.user)}<div><div>${e.user.name}</div><div class="text-2" style="font-size:10px">${e.user.dept}</div></div></div></td>
+      <td>${e.user.dept}</td>
+      <td>${toolBadgeHTML(e.tool)}</td>
+      <td>${e.fileCount}</td>
+      <td>${e.dataTypes.map(d=>`<span class="tag">${d}</span>`).join(' ')}</td>
+      <td class="mono text-2">${e.lastSeen}</td>
+      <td>${riskBadge(e.risk)}</td>
+      <td><span style="color:var(--accent)">${e.sessions}</span></td>
+    </tr>
+  `).join('');
+}
+
+function filterUsage(val){ usageSearch=val.toLowerCase(); renderUsageTable(); }
+function setUsageFilter(f, el){
+  usageFilter=f;
+  document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  renderUsageTable();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PAGE: UPLOAD DETECTOR
+// ═══════════════════════════════════════════════════════════
+
+function renderUploads(){
+  const critical = state.uploadEvents.filter(e=>e.file.sensitivity==='critical').length;
+  const high = state.uploadEvents.filter(e=>e.file.sensitivity==='high').length;
+  document.getElementById('upload-critical-count').textContent = `${critical} CRITICAL`;
+  document.getElementById('upload-high-count').textContent = `${high} HIGH`;
+  document.getElementById('upload-tbody').innerHTML = state.uploadEvents.map(e=>`
+    <tr>
+      <td><span class="mono">${e.file.name}</span></td>
+      <td><div class="flex gap8">${avatarHTML(e.user)}<span>${e.user.name}</span></div></td>
+      <td>${toolBadgeHTML(e.tool)}</td>
+      <td><span class="tag">${e.file.type}</span></td>
+      <td>${riskBadge(e.file.sensitivity)}</td>
+      <td>${e.file.dt.map(d=>`<span class="tag">${d}</span>`).join(' ')}</td>
+      <td class="mono text-2">${e.ts}</td>
+      <td style="min-width:100px"><div class="flex gap8">${scoreBar(e.score)}</div></td>
+    </tr>
+  `).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PAGE: PROMPT SCANNER
+// ═══════════════════════════════════════════════════════════
+
+function renderPrompts(){
+  const feed = document.getElementById('prompt-feed');
+  feed.innerHTML = state.promptEvents.map(e=>{
+    const flagged = flagPrompt(e.text);
+    let highlighted = e.text;
+    flagged.patterns.forEach(p=>{
+      highlighted = highlighted.replace(p.re, m=>`<mark>${m}</mark>`);
+    });
+    return `<div class="prompt-card ${flagged.score>0?'flagged':''}">
+      <div class="prompt-meta">
+        ${avatarHTML(e.user)} <span class="prompt-user"><b>${e.user.name}</b> → ${toolBadgeHTML(e.tool)}</span>
+        ${riskBadge(flagged.score>6?'critical':flagged.score>3?'high':flagged.score>1?'medium':'low')}
+        <span class="text-3" style="margin-left:auto;font-size:10px">${e.ts}</span>
+      </div>
+      <div class="prompt-text">${highlighted}</div>
+      <div style="font-size:10px;color:var(--text-2)">
+        Patterns: ${flagged.patterns.map(p=>`<span style="color:${p.color}">${p.label}</span>`).join(', ')||'None'}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Trend chart
+  const hours=['18h ago','15h ago','12h ago','9h ago','6h ago','3h ago','Now'];
+  const vals=[2,5,3,8,6,11,14];
+  const pctx=document.getElementById('promptChart').getContext('2d');
+  new Chart(pctx,{
+    type:'line',
+    data:{labels:hours,datasets:[{data:vals,borderColor:'#f85149',backgroundColor:'rgba(248,81,73,.08)',fill:true,tension:.4,pointRadius:3,pointBackgroundColor:'#f85149'}]},
+    options:{plugins:{legend:{display:false}},scales:{y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#8b949e',font:{size:10}}},x:{grid:{display:false},ticks:{color:'#8b949e',font:{size:10}}}}}
+  });
+
+  // Pattern list
+  const patternCounts={};
+  state.promptEvents.forEach(e=>{
+    const flagged=flagPrompt(e.text);
+    flagged.patterns.forEach(p=>patternCounts[p.label]=(patternCounts[p.label]||0)+1);
+  });
+  const sorted=Object.entries(patternCounts).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('pattern-list').innerHTML=sorted.map(([label,cnt])=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:11.5px">
+      <span>${label}</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div class="bar-bg" style="width:80px"><div class="bar-fill" style="width:${cnt*33}%;background:#f85149;max-width:100%"></div></div>
+        <span style="color:var(--red);font-weight:700">${cnt}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function flagPrompt(text){
+  let score=0;
+  const found=[];
+  PROMPT_PATTERNS.forEach(p=>{
+    const m=text.match(p.re);
+    if(m&&m.length>0){score+=p.weight; found.push({...p, re:new RegExp(p.re.source, p.re.flags)});}
+  });
+  return {score, patterns:found};
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PAGE: HEATMAP
+// ═══════════════════════════════════════════════════════════
+
+function renderHeatmap(){
+  // Build matrix: DEPTS × AI_TOOLS
+  const matrix = {};
+  const details = {};
+  DEPTS.forEach(d=>{
+    matrix[d]={};
+    details[d]={};
+    AI_TOOLS.forEach(t=>{matrix[d][t.label]=0;details[d][t.label]=[];});
+  });
+
+  state.uploadEvents.forEach(e=>{
+    const w=e.file.sensitivity==='critical'?10:e.file.sensitivity==='high'?6:e.file.sensitivity==='medium'?3:1;
+    matrix[e.user.dept][e.tool.label]=(matrix[e.user.dept][e.tool.label]||0)+w;
+    details[e.user.dept][e.tool.label].push(e);
+  });
+  state.promptEvents.forEach(e=>{
+    const flagged=flagPrompt(e.text);
+    if(flagged.score>0){
+      matrix[e.user.dept][e.tool.label]=(matrix[e.user.dept][e.tool.label]||0)+flagged.score;
+    }
+  });
+
+  // Max value for color scale
+  let maxVal=0;
+  DEPTS.forEach(d=>AI_TOOLS.forEach(t=>{if(matrix[d][t.label]>maxVal)maxVal=matrix[d][t.label];}));
+
+  function scoreToColor(v){
+    if(v===0) return '#1a2a1a';
+    const pct=v/maxVal;
+    if(pct<0.2) return '#1a3a1a';
+    if(pct<0.4) return '#3d4a00';
+    if(pct<0.6) return '#7a4400';
+    if(pct<0.8) return '#c23800';
+    return '#f85149';
+  }
+
+  const CELL=52, GAP=3;
+  const cols=AI_TOOLS.length, rows=DEPTS.length;
+  const w=(CELL+GAP)*cols+90, h=(CELL+GAP)*rows+40;
+
+  let svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" style="overflow:visible">`;
+  // Tool labels (top)
+  AI_TOOLS.forEach((t,j)=>{
+    svg+=`<text x="${90+(CELL+GAP)*j+CELL/2}" y="14" font-size="9" fill="#8b949e" text-anchor="middle" font-family="Inter,sans-serif">${t.label}</text>`;
+  });
+  // Dept labels (left) + cells
+  DEPTS.forEach((dept,i)=>{
+    svg+=`<text x="85" y="${30+(CELL+GAP)*i+CELL/2+4}" font-size="9.5" fill="#8b949e" text-anchor="end" font-family="Inter,sans-serif">${dept}</text>`;
+    AI_TOOLS.forEach((t,j)=>{
+      const val=matrix[dept][t.label]||0;
+      const col=scoreToColor(val);
+      const cx=90+(CELL+GAP)*j, cy=22+(CELL+GAP)*i;
+      const tooltip=`${dept} → ${t.label}: Risk ${val}\n${details[dept][t.label].map(d=>d.file.name).join(', ')||'No uploads'}`;
+      svg+=`<rect class="hm-cell-rect" x="${cx}" y="${cy}" width="${CELL}" height="${CELL}" rx="5" fill="${col}" data-dept="${dept}" data-tool="${t.label}" data-val="${val}" style="cursor:pointer;transition:transform .15s" onmouseover="showHmTooltip(event,'${dept}','${t.label}',${val})" onmouseout="hideTooltip()" onclick="showHmDetail('${dept}','${t.label}')"/>`;
+      if(val>0){
+        svg+=`<text x="${cx+CELL/2}" y="${cy+CELL/2+4}" font-size="${val>99?8:9}" fill="rgba(255,255,255,0.75)" text-anchor="middle" font-family="Inter,sans-serif" pointer-events="none">${val}</text>`;
+      }
+    });
+  });
+  svg+=`</svg>`;
+  document.getElementById('heatmap-container').innerHTML=svg;
+
+  // Dataset ranking
+  const datasetRisk={};
+  state.uploadEvents.forEach(e=>{
+    const n=e.file.name;
+    const w=e.file.sensitivity==='critical'?10:e.file.sensitivity==='high'?6:3;
+    datasetRisk[n]=(datasetRisk[n]||0)+w;
+  });
+  const dsRanked=Object.entries(datasetRisk).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  document.getElementById('dataset-rank').innerHTML=dsRanked.map(([name,score],i)=>{
+    const col=score>20?'#f85149':score>12?'#d29922':'#3fb950';
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;font-size:11px">
+      <span style="color:var(--text-3);width:14px">${i+1}</span>
+      <span class="mono" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</span>
+      <div class="bar-bg" style="width:60px"><div class="bar-fill" style="width:${score/dsRanked[0][1]*100}%;background:${col}"></div></div>
+      <span style="color:${col};font-weight:700;min-width:24px;text-align:right">${score}</span>
+    </div>`;
+  }).join('');
+
+  window._hmMatrix=matrix;
+  window._hmDetails=details;
+}
+
+let _hmDetails={}, _hmMatrix={};
+function showHmTooltip(e,dept,tool,val){
+  const tip=document.getElementById('tooltip');
+  tip.innerHTML=`<div style="font-weight:700;margin-bottom:4px">${dept} → ${tool}</div><div>Risk score: <b style="color:${val>30?'#f85149':val>15?'#d29922':'#3fb950'}">${val}</b></div><div style="font-size:10px;color:var(--text-2);margin-top:4px">Click for details</div>`;
+  tip.style.left=(e.clientX+12)+'px'; tip.style.top=(e.clientY-10)+'px';
+  tip.classList.add('visible');
+}
+function hideTooltip(){ document.getElementById('tooltip').classList.remove('visible'); }
+
+function showHmDetail(dept,tool){
+  const det=window._hmDetails||{};
+  const items=(det[dept]&&det[dept][tool])||[];
+  const val=(window._hmMatrix&&window._hmMatrix[dept]&&window._hmMatrix[dept][tool])||0;
+  const panel=document.getElementById('hm-detail');
+  document.getElementById('hm-detail-title').textContent=`${dept} → ${tool}`;
+  const body=document.getElementById('hm-detail-body');
+  if(items.length===0){
+    body.innerHTML=`<p style="color:var(--text-2);font-size:11.5px">No file uploads found — risk score contributed by prompt leakage events.</p>`;
+  } else {
+    body.innerHTML=`<p style="font-size:11px;color:var(--text-2);margin-bottom:10px">Total risk score: <b style="color:#f85149">${val}</b></p>
+    <table class="tbl"><thead><tr><th>File</th><th>User</th><th>Sensitivity</th><th>Data Types</th><th>Score</th></tr></thead><tbody>
+    ${items.map(e=>`<tr><td class="mono">${e.file.name}</td><td>${e.user.name}</td><td>${riskBadge(e.file.sensitivity)}</td><td>${e.file.dt.map(d=>`<span class="tag">${d}</span>`).join(' ')}</td><td>${scoreBar(e.score)}</td></tr>`).join('')}
+    </tbody></table>`;
+  }
+  panel.style.display='block';
+  panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PAGE: REPORTS
+// ═══════════════════════════════════════════════════════════
+
+function renderReports(){
+  document.getElementById('reports-tbody').innerHTML=state.reportEvents.map(r=>{
+    const col=r.aiProb>85?'#f85149':r.aiProb>65?'#d29922':'#3fb950';
+    return `<tr>
+      <td class="mono">${r.name}</td>
+      <td><div class="flex gap8">${avatarHTML(r.author)}<span>${r.author.name}</span></div></td>
+      <td>${r.dept}</td>
+      <td>
+        <div class="flex gap8">
+          <div class="bar-bg" style="width:80px"><div class="bar-fill" style="width:${r.aiProb}%;background:${col}"></div></div>
+          <span style="color:${col};font-weight:700">${r.aiProb}%</span>
+        </div>
+      </td>
+      <td style="max-width:180px">${r.signals.map(s=>`<span class="tag" style="margin-bottom:2px">${s}</span> `).join('')}</td>
+      <td>${r.hasConfidential?'<span class="risk critical">⚠ YES</span>':'<span class="risk low">✓ No</span>'}</td>
+      <td class="mono text-2">${r.ts}</td>
+      <td><button class="topbar-btn" style="font-size:10px;padding:3px 8px" onclick="alert('Document quarantined and IT notified.')">🔒 Quarantine</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PAGE: PROMPT SCANNER TOOL
+// ═══════════════════════════════════════════════════════════
+
+function loadSample(i){ document.getElementById('scan-input').value=SAMPLE_PROMPTS[i]; runPromptScan(); }
+
+function runPromptScan(){
+  const text=document.getElementById('scan-input').value.trim();
+  if(!text) return;
+  const result=flagPrompt(text);
+  const risk=result.score>6?'critical':result.score>3?'high':result.score>1?'medium':'low';
+  const riskColors={critical:'#f85149',high:'#d29922',medium:'#e3b341',low:'#3fb950'};
+  let highlighted=text;
+  result.patterns.forEach(p=>{highlighted=highlighted.replace(p.re,m=>`<mark>${m}</mark>`);});
+
+  document.getElementById('scan-placeholder').style.display='none';
+  document.getElementById('scan-results-card').style.display='block';
+  document.getElementById('scan-results-body').innerHTML=`
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+      <div style="font-size:32px;font-weight:800;color:${riskColors[risk]}">${result.score}</div>
+      <div><div style="font-size:11px;color:var(--text-2);margin-bottom:3px">RISK SCORE</div>${riskBadge(risk)}</div>
+    </div>
+    <div style="font-size:11px;font-weight:600;color:var(--text-2);margin-bottom:6px">DETECTED PATTERNS (${result.patterns.length})</div>
+    <div style="margin-bottom:14px">${result.patterns.length===0?'<span style="color:var(--green)">✓ No sensitive patterns detected</span>':result.patterns.map(p=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:11.5px"><span style="color:${p.color}">●</span><span>${p.label}</span><span style="color:var(--red);font-size:10px;margin-left:auto">weight:${p.weight}</span></div>`).join('')}</div>
+    <div style="font-size:11px;font-weight:600;color:var(--text-2);margin-bottom:6px">HIGHLIGHTED PROMPT</div>
+    <div class="prompt-text" style="background:var(--bg-3);padding:10px;border-radius:6px;border:1px solid var(--border)">${highlighted}</div>
+    <div style="margin-top:12px;padding:10px;background:${riskColors[risk]}15;border:1px solid ${riskColors[risk]}40;border-radius:6px;font-size:11.5px">
+      <b>Recommendation:</b> ${risk==='critical'||risk==='high'?'🚨 Block this prompt from external AI tools. Notify IT Security immediately.':risk==='medium'?'⚠️ Flag for review. Consider redacting sensitive terms before sending.':'✓ Low risk. Monitor for context changes.'}
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PAGE: SETTINGS
+// ═══════════════════════════════════════════════════════════
+
+function renderSettings(){
+  const blocked=['ChatGPT (OpenAI)','Gemini (Google)','Grok (xAI)','Perplexity AI','Any unregistered AI tool'];
+  const allowed=['Microsoft Copilot (enterprise tier)','GitHub Copilot (org-managed)'];
+  document.getElementById('blocked-tools-list').innerHTML=`
+    <div style="font-size:11px;color:var(--text-2);margin-bottom:10px">Policy: BLOCK external AI unless whitelisted</div>
+    ${blocked.map(b=>`<div style="display:flex;align-items:center;gap:7px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--red)">✗</span>${b}</div>`).join('')}
+    ${allowed.map(a=>`<div style="display:flex;align-items:center;gap:7px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--green)">✓</span>${a}</div>`).join('')}
+  `;
+  const rules=[
+    {label:'PII Detection',patterns:['SSN','DOB','email','phone'],weight:'Critical'},
+    {label:'Revenue / Financial',patterns:['$XM','ARR','EBITDA','margin'],weight:'Critical'},
+    {label:'M&A / Legal',patterns:['acquisition','merger','NDA','due diligence'],weight:'Critical'},
+    {label:'Health Data',patterns:['patient','HIPAA','diagnosis','claim'],weight:'Critical'},
+    {label:'Source Code',patterns:['.zip + code context','IP plans'],weight:'High'},
+    {label:'Salary Data',patterns:['salary','compensation','OTE'],weight:'High'},
+    {label:'Confidential Markers',patterns:['do not share','internal only','confidential'],weight:'High'},
+  ];
+  document.getElementById('rules-list').innerHTML=rules.map(r=>`
+    <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+        <span style="font-size:12px;font-weight:600">${r.label}</span>
+        ${riskBadge(r.weight.toLowerCase()==='critical'?'critical':'high')}
+      </div>
+      <div>${r.patterns.map(p=>`<span class="tag" style="margin-right:3px">${p}</span>`).join('')}</div>
+    </div>
+  `).join('');
+  document.getElementById('thresholds').innerHTML=[
+    {label:'Alert threshold (score)',val:'5',desc:'Trigger alert if risk score ≥'},
+    {label:'Auto-block threshold',val:'8',desc:'Auto-block prompt if score ≥'},
+    {label:'Escalation to CISO',val:'10',desc:'Escalate automatically if score ≥'},
+  ].map(t=>`<div>
+    <div style="font-size:11px;color:var(--text-2);margin-bottom:4px">${t.desc}</div>
+    <input type="number" value="${t.val}" style="width:60px;padding:5px 8px;background:var(--bg-3);border:1px solid var(--border);border-radius:5px;color:var(--text-1);font-size:13px;font-family:var(--font)">
+    <div style="font-size:10px;color:var(--text-3);margin-top:3px">${t.label}</div>
+  </div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════════════════
+
+const PAGE_META = {
+  dashboard: {title:'Overview Dashboard', sub:'Real-time AI shadow usage detection'},
+  'ai-usage': {title:'AI Usage Monitor', sub:'Tracking unauthorized AI tool usage across your org'},
+  uploads:    {title:'Sensitive Upload Detector', sub:'Files uploaded to unapproved AI tools'},
+  prompts:    {title:'Prompt Leakage Scanner', sub:'Detecting sensitive data in AI prompts'},
+  heatmap:    {title:'Data Exposure Heatmap', sub:'Visual risk map: departments × AI tools'},
+  reports:    {title:'AI Report Detector', sub:'Identifying AI-generated internal documents'},
+  scanner:    {title:'Prompt Risk Analyzer', sub:'Analyze any prompt for sensitive data patterns'},
+  settings:   {title:'Policy Settings', sub:'Configure detection rules and alert thresholds'},
+};
+
+let renderedPages = {};
+
+function switchPage(id, navEl){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  if(navEl) navEl.classList.add('active');
+  const meta=PAGE_META[id]||{};
+  document.getElementById('topbar-title').textContent=meta.title||id;
+  document.getElementById('topbar-sub').textContent=meta.sub||'';
+  if(!renderedPages[id]){
+    renderedPages[id]=true;
+    if(id==='ai-usage') renderUsageTable();
+    if(id==='uploads') renderUploads();
+    if(id==='prompts') renderPrompts();
+    if(id==='heatmap') renderHeatmap();
+    if(id==='reports') renderReports();
+    if(id==='settings') renderSettings();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  LIVE SIMULATION ENGINE
+// ═══════════════════════════════════════════════════════════
+
+const NEW_FILES=[
+  "Payroll_June_2025.xlsx","Strategy_Meeting_Notes.docx","Client_CRM_Export.csv",
+  "Trade_Secret_IP.pdf","Board_Minutes_Q2.docx","API_Keys_Config.env",
+];
+
+function injectLiveEvent(){
+  const user=USERS[Math.floor(Math.random()*USERS.length)];
+  const tool=AI_TOOLS[Math.floor(Math.random()*AI_TOOLS.length)];
+  const file=NEW_FILES[Math.floor(Math.random()*NEW_FILES.length)];
+  const risk=['critical','high','high','medium'][Math.floor(Math.random()*4)];
+  const dotColor=risk==='critical'?'#f85149':risk==='high'?'#d29922':'#e3b341';
+  const now=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+
+  // Add to feed
+  state.feedEvents.unshift({
+    type:'upload',
+    text:`<b>${user.name}</b> (${user.dept}) uploaded <b class="mono" style="font-size:10.5px">${file}</b> to ${toolBadgeHTML(tool)}`,
+    risk, ts:now,
+  });
+  if(state.feedEvents.length>20) state.feedEvents.pop();
+
+  // Update stats
+  state.stats.uploads++;
+  if(risk==='critical') state.stats.critical++;
+  state.stats.prompts+=Math.floor(Math.random()*5)+1;
+  animateCounter('stat-critical', state.stats.critical);
+  animateCounter('stat-uploads', state.stats.uploads);
+  animateCounter('stat-prompts', state.stats.prompts);
+
+  // Live alert banner
+  if(risk==='critical'){
+    const alert=document.getElementById('live-alert');
+    document.getElementById('live-alert-text').textContent=`Critical: ${user.name} uploaded ${file} to ${tool.label}`;
+    alert.style.display='flex';
+    setTimeout(()=>alert.style.display='none', 4000);
+  }
+
+  // Re-render feed if on dashboard
+  if(document.getElementById('page-dashboard').classList.contains('active')) renderFeed();
+  updateBadges();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  UTILITIES
+// ═══════════════════════════════════════════════════════════
+
+function animateCounter(id, target){
+  const el=document.getElementById(id);
+  if(!el) return;
+  const start=parseInt(el.textContent)||0;
+  const diff=target-start, steps=20;
+  let s=0;
+  const iv=setInterval(()=>{
+    s++;
+    el.textContent=Math.round(start+diff*(s/steps));
+    if(s>=steps){el.textContent=target;clearInterval(iv);}
+  },20);
+}
+
+function exportCSV(){
+  const rows=[['User','Department','AI Tool','Risk','Files Uploaded','Last Seen']];
+  state.usageEvents.forEach(e=>rows.push([e.user.name,e.user.dept,e.tool.label,e.risk,e.fileCount,e.lastSeen]));
+  const csv=rows.map(r=>r.map(c=>`"${c}"`).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='shadowscan_export.csv'; a.click();
+}
+
+function triggerScan(){
+  const btn=document.querySelector('.topbar-btn.primary');
+  btn.textContent='⏳ Scanning…'; btn.disabled=true;
+  setTimeout(()=>{
+    injectLiveEvent();
+    btn.textContent='▶ Run Scan'; btn.disabled=false;
+  }, 1200);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════
+
+seedData();
+renderDashboard();
+renderedPages['dashboard']=true;
+
+// Live event every 7s
+setInterval(injectLiveEvent, 7000);
+</script>
+</body>
+</html>
